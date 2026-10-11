@@ -13,9 +13,16 @@
   <a href="https://github.com/proteus-evolve/Proteus/actions/workflows/release-smoke.yml"><img src="https://github.com/proteus-evolve/Proteus/actions/workflows/release-smoke.yml/badge.svg" alt="release smoke"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+">
-  <img src="https://img.shields.io/badge/version-0.3.0-informational.svg" alt="v0.3.0">
+  <img src="https://img.shields.io/badge/version-0.4.0-informational.svg" alt="v0.4.0">
   <img src="https://img.shields.io/badge/status-research%20preview-orange.svg" alt="research preview">
 </p>
+
+<p align="center">
+  <b>Choose your harness. Start evolving.</b><br>
+  A 15-second evolution trace. <a href="https://proteus-evolve.github.io/">Explore the interactive demo →</a>
+</p>
+
+https://github.com/user-attachments/assets/63311c1e-1ad9-4821-81b4-044cf5bf4650
 
 <p align="center">
   <a href="#-60-second-demo-no-api-key-no-docker">Quick Start</a> •
@@ -26,7 +33,8 @@
   <a href="docs/RECIPES.md">Recipes</a> •
   <a href="docs/BENCHMARKS.md">Bring a Benchmark</a> •
   <a href="docs/MEASUREMENTS.md">Add a Measurement</a> •
-  <a href="docs/releases/v0.3.0.md">v0.3.0 Notes</a> •
+  <a href="docs/VISUALIZE.md">Visualize Runs</a> •
+  <a href="docs/releases/v0.4.0.md">v0.4.0 Notes</a> •
   <a href="environments/README.md">Environments</a> •
   <a href="#-measurement">Measurement</a>
 </p>
@@ -56,7 +64,7 @@ Three things set it apart from every existing harness-evolution system:
 2. **Goal *and* no-goal, with visible or hidden evaluators.** Others hard-code a single
    regime: one benchmark verifier, agent blind to the score, goal mandatory. Proteus spans
    the space — `no-goal | one goal | many goals`, and evaluators the agent either **sees**
-   (in the observe phase) or **never sees**. No-goal, unpressured evolution is a
+   (in context-fresh phases) or **never sees**. No-goal, unpressured evolution is a
    first-class mode.
 3. **A measurement instrument, not just a score.** Others report task pass-rates. Proteus
    ships the ruler for the harness itself: **structural distance** between harness states
@@ -67,7 +75,7 @@ Three things set it apart from every existing harness-evolution system:
 ## 🚀 60-second demo (no API key, no Docker)
 
 ```bash
-pip install proteus-evolve  # no model SDK; Python 3.10 adds only a TOML compatibility package
+pip install proteus-evolve==0.4.0  # no model SDK; Python 3.10 adds only a TOML compatibility package
 ```
 
 The bundled `minimal` harness runs fully offline, so you can see the whole pipeline before
@@ -78,6 +86,7 @@ proteus run --harness minimal \
     --arm neutral --arm review:notes --arm review:tools \
     --seeds 4 --episodes 8 --out runs/demo
 proteus measure --harness minimal --out runs/demo
+proteus visualize --out runs/demo  # local UI: http://127.0.0.1:8301
 ```
 
 ```
@@ -92,6 +101,11 @@ behavioural R (between/within arms, last episode): 3.075  p=0.0150
 An installed action preference measurably shifts what the harness grows — and the same
 `measure` reads a no-goal run and a goal run identically.
 
+**Proteus Visualize** opens existing sweeps with looping replay, episode details,
+snapshot/candidate identities, and the same structural and behavioral instruments.
+Viewing makes no model calls; explicit CLI-backed launches are opt-in. See
+[`docs/VISUALIZE.md`](docs/VISUALIZE.md) for configuration, evidence and export boundaries.
+
 ## 🧩 Harnesses in the box
 
 | adapter | what it is | needs |
@@ -100,11 +114,12 @@ An installed action preference measurably shifts what the harness grows — and 
 | `llm` | the same harness driven by a live model — any OpenAI-compatible endpoint, DeepSeek by default | an API key |
 | `dsh` | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), headless profile, in a prepared container | Docker + a DeepSeek key |
 | `pi` | [Pi](https://github.com/badlogic/pi-mono) — Mario Zechner's minimal coding harness (4 tools, native AGENTS.md + skills) | Docker + a DeepSeek key |
+| `codex` | [OpenAI Codex CLI](https://github.com/openai/codex) — pinned, source-evolving Rust harness using native `codex exec --json` traces | Docker + Codex auth/API key |
 | `aki` | the Aki research harness (the paper's apparatus) | the research checkout |
 | yours | `--harness <module>:<Class>` — no registration | your adapter |
 
-`dsh` and `pi` are the source-evolving third-party integrations. At seed time each adapter
-extracts the pinned harness's real TypeScript source into `harness/src/`. During episode N,
+`dsh`, `pi`, and `codex` are the source-evolving third-party integrations. At seed time each
+adapter extracts the pinned harness's real source into `harness/src/`. During episode N,
 all four phases boot the same read-only last-valid snapshot while writing a separate
 candidate. After reflect, Proteus rebuilds and validates the candidate; only a passing
 candidate activates in episode N+1. A failed build is prevented from activating, while
@@ -130,7 +145,7 @@ flowchart LR
 
 Every seed runs `N` context-fresh **episodes**. Evolved harness files cross the episode
 boundary; adapters that opt into framework continuity also receive a bounded operational
-handoff stored outside the measured snapshot. One episode is four phases:
+handoff stored outside the measured snapshot. By default, one episode is four phases:
 
 ```
 observe  →  propose  →  act  →  reflect
@@ -189,6 +204,12 @@ GoalConfig.of(text="Pursue A and B together.",
 
 An evaluator is any callable `(trace, ctx) -> EvalResult`; bring a benchmark verifier, an
 LLM judge, or one of the built-ins (`proteus.core.evaluators`).
+
+Evaluator visibility, selection eligibility, and scheduling are independent. You can
+evaluate H0, every N episodes, or explicit checkpoints while retaining dated feedback
+across fresh contexts. See [evaluator controls](docs/BENCHMARKS.md#evaluator-roles-schedules-and-feedback).
+The default four-phase protocol can also be customized; DSH supports explicit
+interrupted-phase recovery without refilling the tool budget. See [episode controls](docs/EPISODE.md).
 
 ### Sandbox
 
@@ -273,16 +294,17 @@ roots, so the evolving agent can never read its own condition.
 
 ## 📊 Status
 
-`v0.3.0` (research preview). Working today: the offline `minimal` harness; the live `llm`
-harness; pinned, source-evolving DeepSeek Harness and Pi adapters with frozen per-episode
+`v0.4.0` (research preview). Working today: the offline `minimal` harness; the live `llm`
+harness; pinned, source-evolving DeepSeek Harness, Pi, and Codex CLI adapters with frozen per-episode
 activation, automatic rollback, exact-tree boundary gates, rebuild caching, turn budgets,
 phase-aware act-priority budget plans and agent-authored checkpoint tracking, and task
 mounts; the Aki research adapter; local, Polyglot, and SWE-bench task integrations;
-resume-safe sweeps; the full measurement,
+resume-safe sweeps, configurable phases, scheduled evaluators, and a local Visualize workspace;
+the full measurement,
 audit, reliability, report, and repository-export paths; and adapter/environment tooling.
 CI covers Python 3.10–3.14. The separate release-smoke workflow runs two episodes across
-the public release set (`minimal`, `llm`, `dsh`, `pi`), exercises the benchmark path, and
-requires both container harnesses to edit their own source and boot the edit; releases use
+the public release set (`minimal`, `llm`, `dsh`, `pi`, `codex`), exercises the benchmark path, and
+requires all three container harnesses to edit their own source and boot the edit; releases use
 pinned upstream versions, while the weekly upstream canary is advisory. As a
 cross-implementation check, Proteus's
 behavioural ruler applied to the research runs independently reproduces their headline
@@ -307,7 +329,7 @@ Where help is wanted, in one line each — the full list with difficulty tags is
 [ROADMAP.md](ROADMAP.md):
 
 - **More harnesses** — Hermes Agent first (Python, built-in self-improvement surfaces),
-  then SWE-agent, OpenClaw, Codex CLI, OpenHands, OpenCode, Goose.
+  then SWE-agent, OpenClaw, OpenHands, OpenCode, Goose.
 - **More benchmarks** — BigCodeBench-lite and a LiveCodeBench subset, SWE-bench
   Lite/Verified wiring, and finishing sandboxed grading for `swe` (HumanEval and MBPP
   are shipped).
